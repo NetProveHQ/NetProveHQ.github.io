@@ -1,10 +1,10 @@
 /* ===== Custom Properties ===== */
 :root {
   --accent: #2196F3;
-  --accent-dark: #1976D2;
+  --accent-dark: #1565C0;
   --accent-light: #BBDEFB;
   --cyan: #00BCD4;
-  --green: #10B981;
+  --green: #4CAF50;
   --purple: #7C3AED;
   --orange: #F59E0B;
   --red: #EF4444;
@@ -60,10 +60,12 @@ ul { list-style: none; }
 }
 .logo-badge {
   width: 36px; height: 36px; border-radius: 10px;
-  background: linear-gradient(135deg, #2196F3, #00BCD4);
+  background: linear-gradient(135deg, #2196F3 0%, #00BCD4 50%, #4CAF50 100%);
   display: flex; align-items: center; justify-content: center;
-  font-size: 0.85rem; font-weight: 800; color: #fff;
-  letter-spacing: -0.5px;
+  font-size: 0.75rem; font-weight: 800; color: #fff;
+  letter-spacing: -1px;
+  text-transform: lowercase;
+  box-shadow: 0 2px 8px rgba(33,150,243,0.3);
 }
 .nav-links { display: flex; align-items: center; gap: 32px; }
 .nav-links a {
@@ -147,7 +149,7 @@ ul { list-style: none; }
   line-height: 1.1; margin-bottom: 20px;
 }
 .gradient-text {
-  background: linear-gradient(135deg, #2196F3, #00BCD4, #10B981);
+  background: linear-gradient(135deg, #2196F3, #00BCD4, #4CAF50);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text;
 }
@@ -245,7 +247,7 @@ ul { list-style: none; }
 .step:hover { border-color: rgba(33,150,243,0.3); }
 .step-number {
   flex-shrink: 0; width: 48px; height: 48px; border-radius: 12px;
-  background: linear-gradient(135deg, #2196F3, #00BCD4);
+  background: linear-gradient(135deg, #2196F3, #4CAF50);
   display: flex; align-items: center; justify-content: center;
   font-size: 1.2rem; font-weight: 800; color: #fff;
 }
@@ -277,7 +279,7 @@ ul { list-style: none; }
   width: 36px; height: 36px; border-radius: 8px;
   background: #334155; transition: background 0.3s;
 }
-.mock-nav-item.active { background: linear-gradient(135deg, #2196F3, #00BCD4); }
+.mock-nav-item.active { background: linear-gradient(135deg, #2196F3, #4CAF50); }
 .mock-content { flex: 1; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .mock-gauges { display: flex; gap: 12px; }
 .mock-gauge {
