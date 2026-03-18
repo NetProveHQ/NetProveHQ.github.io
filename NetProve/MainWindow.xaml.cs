@@ -27,7 +27,9 @@ namespace NetProve
         private Dictionary<string, UIElement> _pages = new();
         private string _currentPage = "Dashboard";
         private DispatcherTimer? _toastTimer;
+        private DispatcherTimer? _lagBannerTimer;
         private SystemTrayHelper? _tray;
+        private readonly NetworkScanner _scanner = new();
 
         public MainWindow()
         {
@@ -40,9 +42,6 @@ namespace NetProve
 
             // System tray setup
             _tray = new SystemTrayHelper(this);
-
-            // Desktop shortcut on first run
-            ShortcutHelper.CreateDesktopShortcutIfNeeded();
 
             SubscribeToEvents();
             InitPages();
@@ -63,13 +62,8 @@ namespace NetProve
             CacheList.ItemsSource = _vm.Caches;
             ReportList.ItemsSource = _vm.Reports;
 
-            // Bind chat messages and DNS results
-            ChatList.ItemsSource = _vm.ChatMessages;
+            // Bind DNS results
             DnsList.ItemsSource = _vm.DnsResults;
-
-            // Auto-scroll chat on new messages
-            _vm.ChatMessages.CollectionChanged += (s, e) =>
-                Dispatcher.BeginInvoke(() => ChatScroller.ScrollToEnd());
 
             // Subscribe to VM property changes for UI updates
             _vm.PropertyChanged += Vm_PropertyChanged;
@@ -85,6 +79,23 @@ namespace NetProve
             _loc.Apply(lang, Resources);
             InitLanguageComboBox(lang);
             RefreshStaticStrings();
+
+            // Start background services AFTER the window is fully rendered so the
+            // UI is responsive immediately. Non-critical tasks (desktop shortcut)
+            // are also deferred here.
+            ContentRendered += OnContentRendered;
+        }
+
+        private void OnContentRendered(object? sender, EventArgs e)
+        {
+            ContentRendered -= OnContentRendered;
+
+            // Create desktop + Start Menu shortcut on first run
+            ShortcutHelper.CreateDesktopShortcutIfNeeded();
+            ShortcutHelper.PinToStartMenu();
+
+            // Start all background monitors and engines now that the window is visible
+            _engine.Start();
         }
 
         // Named handlers for proper unsubscription
@@ -93,22 +104,25 @@ namespace NetProve
         private Action<GameDetectedEvent>? _gameDetHandler;
         private Action<GameEndedEvent>? _gameEndHandler;
         private Action<LagWarningEvent>? _lagHandler;
+        private Action<LagWarningDismissEvent>? _lagDismissHandler;
         private Action<OptimizationAppliedEvent>? _optHandler;
 
         private void SubscribeToEvents()
         {
-            _sysHandler = e => Dispatcher.Invoke(() => UpdateSystemUI(e.Metrics));
-            _netHandler = e => Dispatcher.Invoke(() => UpdateNetworkUI(e.Metrics));
-            _gameDetHandler = e => Dispatcher.Invoke(() => UpdateGameUI(e.GameName, e.Platform, true));
-            _gameEndHandler = e => Dispatcher.Invoke(() => UpdateGameUI(_loc["NoGame"], "", false));
-            _lagHandler = e => Dispatcher.Invoke(() => ShowLagWarning(e.Detail));
-            _optHandler = e => Dispatcher.Invoke(() => TbStatus.Text = e.ActionName);
+            _sysHandler = e => Dispatcher.BeginInvoke(() => UpdateSystemUI(e.Metrics));
+            _netHandler = e => Dispatcher.BeginInvoke(() => UpdateNetworkUI(e.Metrics));
+            _gameDetHandler = e => Dispatcher.BeginInvoke(() => UpdateGameUI(e.GameName, e.Platform, true));
+            _gameEndHandler = e => Dispatcher.BeginInvoke(() => UpdateGameUI(_loc["NoGame"], "", false));
+            _lagHandler = e => Dispatcher.BeginInvoke(() => ShowLagWarning(e.Detail));
+            _lagDismissHandler = e => Dispatcher.BeginInvoke(() => DismissLagWarning());
+            _optHandler = e => Dispatcher.BeginInvoke(() => TbStatus.Text = e.ActionName);
 
             EventBus.Instance.Subscribe(_sysHandler);
             EventBus.Instance.Subscribe(_netHandler);
             EventBus.Instance.Subscribe(_gameDetHandler);
             EventBus.Instance.Subscribe(_gameEndHandler);
             EventBus.Instance.Subscribe(_lagHandler);
+            EventBus.Instance.Subscribe(_lagDismissHandler);
             EventBus.Instance.Subscribe(_optHandler);
         }
 
@@ -119,6 +133,7 @@ namespace NetProve
             if (_gameDetHandler != null) EventBus.Instance.Unsubscribe(_gameDetHandler);
             if (_gameEndHandler != null) EventBus.Instance.Unsubscribe(_gameEndHandler);
             if (_lagHandler != null) EventBus.Instance.Unsubscribe(_lagHandler);
+            if (_lagDismissHandler != null) EventBus.Instance.Unsubscribe(_lagDismissHandler);
             if (_optHandler != null) EventBus.Instance.Unsubscribe(_optHandler);
         }
 
@@ -135,7 +150,7 @@ namespace NetProve
                 ["Lag"]       = PageLag,
                 ["Speed"]     = PageSpeed,
                 ["Reports"]   = PageReports,
-                ["Assistant"] = PageAssistant
+                ["Devices"]   = PageDevices,
             };
         }
 
@@ -158,12 +173,6 @@ namespace NetProve
             if (tag == "Processes") _vm.RefreshProcessesCommand.Execute(null);
             if (tag == "Cache")     _vm.ScanCachesCommand.Execute(null);
             if (tag == "Reports")   UpdateReportsPage();
-            if (tag == "Assistant" && _vm.ChatMessages.Count == 0)
-            {
-                // Show welcome message on first visit
-                var welcome = _engine.AIAssistant.GetWelcomeMessage();
-                _vm.ChatMessages.Add(new ChatMessage { Text = welcome, IsUser = false });
-            }
         }
 
         // ── System metrics UI ────────────────────────────────────────────────
@@ -261,6 +270,25 @@ namespace NetProve
         {
             TbPrediction.Text = detail;
             BannerLag.Visibility = Visibility.Visible;
+
+            // Auto-dismiss after 30 seconds if conditions improve
+            if (_lagBannerTimer == null)
+            {
+                _lagBannerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+                _lagBannerTimer.Tick += (s, e) =>
+                {
+                    _lagBannerTimer.Stop();
+                    DismissLagWarning();
+                };
+            }
+            _lagBannerTimer.Stop();
+            _lagBannerTimer.Start();
+        }
+
+        private void DismissLagWarning()
+        {
+            _lagBannerTimer?.Stop();
+            BannerLag.Visibility = Visibility.Collapsed;
         }
 
         // ── VM property changes ───────────────────────────────────────────────
@@ -354,12 +382,15 @@ namespace NetProve
             ResultToast.BeginAnimation(OpacityProperty, fadeIn);
 
             // Auto-hide after 3 seconds
-            _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-            _toastTimer.Tick += (s, e) =>
+            if (_toastTimer == null)
             {
-                _toastTimer.Stop();
-                HideToast();
-            };
+                _toastTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+                _toastTimer.Tick += (s, e) =>
+                {
+                    _toastTimer!.Stop();
+                    HideToast();
+                };
+            }
             _toastTimer.Start();
         }
 
@@ -487,6 +518,50 @@ namespace NetProve
                 ThemeToggleText.Text = "\u263D " + _loc["DarkMode"];
         }
 
+        // ── Pin to Taskbar (via Start Menu shortcut) ─────────────────────────
+        private void BtnPinTaskbar_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (ShortcutHelper.IsStartMenuPinned)
+            {
+                ShortcutHelper.UnpinFromStartMenu();
+            }
+            else
+            {
+                ShortcutHelper.PinToStartMenu();
+                ShowToast(true, _loc["PinnedToTaskbar"]);
+            }
+            UpdatePinLabels();
+        }
+
+        // ── Run at Startup toggle ────────────────────────────────────────────
+        private void BtnRunAtStartup_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (ShortcutHelper.IsStartupEnabled)
+            {
+                ShortcutHelper.DisableStartup();
+                ShowToast(true, _loc["RemovedFromStartup"]);
+            }
+            else
+            {
+                ShortcutHelper.EnableStartup();
+                ShowToast(true, _loc["AddedToStartup"]);
+            }
+            UpdatePinLabels();
+        }
+
+        private void UpdatePinLabels()
+        {
+            if (TbPinTaskbar != null)
+                TbPinTaskbar.Text = ShortcutHelper.IsStartMenuPinned
+                    ? $"📌 {_loc["UnpinFromTaskbar"]}"
+                    : $"📌 {_loc["PinToTaskbar"]}";
+
+            if (TbRunAtStartup != null)
+                TbRunAtStartup.Text = ShortcutHelper.IsStartupEnabled
+                    ? $"✅ {_loc["RunAtStartup"]}"
+                    : $"⬜ {_loc["RunAtStartup"]}";
+        }
+
         // ── Localized static strings ─────────────────────────────────────────
         private void RefreshStaticStrings()
         {
@@ -535,21 +610,36 @@ namespace NetProve
             // New feature buttons
             UpdateAutoModeButton();
             UpdateNagleButton();
-            BtnSendChat.Content = $"📨 {_loc["Send"]}";
             BtnRunDnsBenchmark.Content = $"🔍 {_loc["RunDnsBenchmark"]}";
             BtnRestoreDns.Content = $"↩ {_loc["RestoreDns"]}";
             BtnDetectBand.Content = $"📡 {_loc["DetectBand"]}";
             BtnResetNetwork.Content = $"🔄 {_loc["NetworkReset"]}";
+            BtnScanNetwork.Content = $"🔍 {_loc["ScanNetwork"]}";
+            BtnScanNetwork.ToolTip = _loc["TipScanNetwork"];
 
             // Tooltips for new buttons
             BtnAutoMode.ToolTip = _loc["TipAutoMode"];
             BtnRunDnsBenchmark.ToolTip = _loc["TipDnsBenchmark"];
             BtnToggleNagle.ToolTip = _loc["TipNagle"];
             BtnResetNetwork.ToolTip = _loc["TipNetworkReset"];
+            BtnRestoreDns.ToolTip = _loc["TipRestoreDns"];
+            BtnDetectBand.ToolTip = _loc["TipDetectBand"];
+            // Pin/Startup labels
+            UpdatePinLabels();
+
+            // Gauge labels (localized)
+            GaugeCpu.Label = _loc["Usage"];
+            GaugeRam.Label = _loc["Usage"];
+            GaugeDisk.Label = _loc["Activity"];
+            GaugePing.Label = _loc["Ping"];
 
             // Gaming enhancements status
             TbPowerPlanStatus.Text = _vm.GamingMode ? _loc["PowerPlanHigh"] : _loc["PowerPlanRestored"];
             TbVisualFxStatus.Text = _vm.GamingMode ? _loc["NagleDisabled"] : _loc["NagleEnabled"];
+
+            // Game status (only update if no game is active)
+            if (!_vm.GamingMode || string.IsNullOrEmpty(TbActiveGame.Text))
+                TbGameStatus.Text = _loc["NoGame"];
         }
 
         // ── Language ──────────────────────────────────────────────────────────
@@ -642,22 +732,6 @@ namespace NetProve
         private void BtnAutoMode_Click(object sender, RoutedEventArgs e)
             => _vm.ToggleAutoModeCommand.Execute(null);
 
-        private void BtnSendChat_Click(object sender, RoutedEventArgs e)
-        {
-            _vm.ChatInput = TbChatInput.Text;
-            _vm.SendChatCommand.Execute(null);
-            TbChatInput.Text = "";
-            TbChatInput.Focus();
-        }
-
-        private void TbChatInput_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-        {
-            if (e.Key == System.Windows.Input.Key.Enter)
-            {
-                BtnSendChat_Click(sender, e);
-                e.Handled = true;
-            }
-        }
 
         private void BtnRunDnsBenchmark_Click(object sender, RoutedEventArgs e)
             => _vm.RunDnsBenchmarkCommand.Execute(null);
@@ -680,6 +754,34 @@ namespace NetProve
         private void BtnResetNetwork_Click(object sender, RoutedEventArgs e)
             => _vm.ResetNetworkStackCommand.Execute(null);
 
+        private async void BtnScanNetwork_Click(object sender, RoutedEventArgs e)
+        {
+            if (_scanner.IsScanning) return;
+            BtnScanNetwork.IsEnabled = false;
+            BtnScanNetwork.Content = $"🔍 {_loc["Scanning"]}";
+            TbDeviceCount.Text = "";
+
+            try
+            {
+                var devices = await Task.Run(() => _scanner.ScanAsync());
+                DeviceList.ItemsSource = devices;
+                TbDeviceCount.Text = string.Format(_loc["DevicesFound"], devices.Count);
+            }
+            catch (Exception ex)
+            {
+                var msg = $"{ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}";
+                try { System.IO.File.WriteAllText(
+                    System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "netprove_crash.txt"), msg); }
+                catch { }
+                TbDeviceCount.Text = ex.Message;
+            }
+            finally
+            {
+                BtnScanNetwork.IsEnabled = true;
+                BtnScanNetwork.Content = $"🔍 {_loc["ScanNetwork"]}";
+            }
+        }
+
         private void UpdateAutoModeButton()
         {
             BtnAutoMode.Content = _vm.AutoMode
@@ -701,8 +803,7 @@ namespace NetProve
         protected override void OnStateChanged(EventArgs e)
         {
             base.OnStateChanged(e);
-            if (WindowState == WindowState.Minimized && AppSettings.Instance.MinimizeToTray)
-                _tray?.MinimizeToTray();
+            // Normal minimize stays in taskbar — no tray hide
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

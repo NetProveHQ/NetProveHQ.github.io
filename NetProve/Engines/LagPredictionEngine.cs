@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using NetProve.Core;
+using NetProve.Localization;
 using NetProve.Models;
 
 namespace NetProve.Engines
@@ -68,18 +69,28 @@ namespace NetProve.Engines
             {
                 try
                 {
-                    await Task.Delay(5000, ct);
+                    await Task.Delay(10000, ct); // Check every 10 seconds instead of 5
                     var pred = Predict();
                     Latest = pred;
 
-                    if (pred.PredictedLag && AppSettings.Instance.ShowLagWarnings)
+                    if (AppSettings.Instance.ShowLagWarnings)
                     {
-                        EventBus.Instance.Publish(new LagWarningEvent
+                        if (pred.PredictedLag)
                         {
-                            Cause = pred.Reason,
-                            Detail = $"Lag predicted in ~{pred.EstimatedSecondsUntilLag}s. Confidence: {pred.Confidence:F0}%",
-                            Severity = pred.PredictedSeverity
-                        });
+                            var loc = LocalizationManager.Instance;
+                            EventBus.Instance.Publish(new LagWarningEvent
+                            {
+                                Cause = pred.Reason,
+                                Detail = string.Format(loc["LagPredictedIn"],
+                                    pred.EstimatedSecondsUntilLag, pred.Confidence.ToString("F0")),
+                                Severity = pred.PredictedSeverity
+                            });
+                        }
+                        else
+                        {
+                            // Metrics stabilized — dismiss the warning
+                            EventBus.Instance.Publish(new LagWarningDismissEvent());
+                        }
                     }
                 }
                 catch (OperationCanceledException) { break; }
@@ -98,6 +109,7 @@ namespace NetProve.Engines
             if (sysSnap.Length < 5 || netSnap.Length < 5)
                 return new LagPrediction { PredictedLag = false };
 
+            var loc = LocalizationManager.Instance;
             var reasons = new List<string>();
             float maxConfidence = 0;
 
@@ -108,7 +120,7 @@ namespace NetProve.Engines
             if (cpuSlope > 3.0 && latestCpu > 60)
             {
                 double secsToOverload = latestCpu < 90 ? (90 - latestCpu) / cpuSlope : 5;
-                reasons.Add($"CPU rising sharply ({cpuSlope:+0.0}%/s, now {latestCpu:F0}%)");
+                reasons.Add(string.Format(loc["CpuRising"], $"{cpuSlope:+0.0}%", $"{latestCpu:F0}"));
                 maxConfidence = Math.Max(maxConfidence, Math.Min(90f, (float)(cpuSlope * 10 + latestCpu / 2)));
             }
 
@@ -118,7 +130,7 @@ namespace NetProve.Engines
             double latestRam = ramValues.Last();
             if (ramSlope > 1.5 && latestRam > 75)
             {
-                reasons.Add($"RAM usage climbing ({latestRam:F0}%, trend +{ramSlope:F1}%/s)");
+                reasons.Add(string.Format(loc["RamClimbing"], $"{latestRam:F0}", $"{ramSlope:F1}"));
                 maxConfidence = Math.Max(maxConfidence, Math.Min(85f, (float)(ramSlope * 15 + latestRam / 3)));
             }
 
@@ -128,7 +140,7 @@ namespace NetProve.Engines
             double latestPing = pingValues.Last();
             if (pingSlope > 2.0 && latestPing > 50)
             {
-                reasons.Add($"Latency increasing ({latestPing:F0}ms, trend +{pingSlope:F1}ms/s)");
+                reasons.Add(string.Format(loc["LatencyIncreasing"], $"{latestPing:F0}", $"{pingSlope:F1}"));
                 maxConfidence = Math.Max(maxConfidence, Math.Min(95f, (float)(pingSlope * 8 + latestPing / 3)));
             }
 
@@ -138,7 +150,7 @@ namespace NetProve.Engines
             double jitterAvg = jitterValues.Average();
             if (jitterMax > 30 && jitterMax > jitterAvg * 2.5)
             {
-                reasons.Add($"Jitter spikes detected (peak {jitterMax:F0}ms, avg {jitterAvg:F0}ms)");
+                reasons.Add(string.Format(loc["JitterSpikes"], $"{jitterMax:F0}", $"{jitterAvg:F0}"));
                 maxConfidence = Math.Max(maxConfidence, Math.Min(80f, (float)jitterMax));
             }
 
@@ -147,7 +159,7 @@ namespace NetProve.Engines
             double plRecent = plValues.TakeLast(3).Average();
             if (plRecent >= 1.0)
             {
-                reasons.Add($"Packet loss detected ({plRecent:F1}% recent average)");
+                reasons.Add(string.Format(loc["PacketLossDetected"], $"{plRecent:F1}"));
                 maxConfidence = Math.Max(maxConfidence, Math.Min(90f, (float)plRecent * 20f));
             }
 
@@ -164,7 +176,7 @@ namespace NetProve.Engines
                 PredictedLag = willLag,
                 PredictedSeverity = severity,
                 EstimatedSecondsUntilLag = eta,
-                Reason = reasons.Count > 0 ? string.Join("; ", reasons) : "All metrics stable",
+                Reason = reasons.Count > 0 ? string.Join("; ", reasons) : loc["AllMetricsStable"],
                 Confidence = maxConfidence
             };
         }

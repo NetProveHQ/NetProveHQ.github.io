@@ -16,8 +16,8 @@ namespace NetProve.Monitors
     /// </summary>
     public sealed class NetworkAnalyzer : IDisposable
     {
-        private const int PingBatchSize = 5;       // pings per measurement cycle
-        private const int PingTimeoutMs = 2000;
+        private const int PingBatchSize = 3;       // pings per measurement cycle (reduced for lower CPU)
+        private const int PingTimeoutMs = 1500;
 
         private PerformanceCounter? _dlCounter;
         private PerformanceCounter? _ulCounter;

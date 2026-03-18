@@ -15,11 +15,11 @@ namespace NetProve.Models
         public float DownloadMbps => DownloadBytesPerSec * 8f / 1_000_000f;
         public float UploadMbps => UploadBytesPerSec * 8f / 1_000_000f;
 
-        public bool IsStable => PingMs < 80 && JitterMs < 15 && PacketLossPercent < 1;
+        public bool IsStable => PingMs < 60 && JitterMs < 10 && PacketLossPercent < 0.5;
         public NetworkQuality Quality =>
-            PacketLossPercent >= 5 || PingMs >= 200 ? NetworkQuality.Poor :
-            PacketLossPercent >= 2 || PingMs >= 100 ? NetworkQuality.Fair :
-            JitterMs >= 20 || PingMs >= 60 ? NetworkQuality.Good :
+            PacketLossPercent >= 3 || PingMs >= 150 ? NetworkQuality.Poor :
+            PacketLossPercent >= 0.5 || PingMs >= 80 || JitterMs >= 25 ? NetworkQuality.Fair :
+            PacketLossPercent >= 0.05 || PingMs >= 30 || JitterMs >= 8 ? NetworkQuality.Good :
             NetworkQuality.Excellent;
     }
 

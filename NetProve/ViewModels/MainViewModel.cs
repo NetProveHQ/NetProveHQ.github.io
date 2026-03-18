@@ -147,12 +147,6 @@ namespace NetProve.ViewModels
         private bool _autoMode;
         public bool AutoMode { get => _autoMode; set => SetField(ref _autoMode, value); }
 
-        // ── AI Chat ─────────────────────────────────────────────────────────────
-        private ObservableCollection<ChatMessage> _chatMessages = new();
-        public ObservableCollection<ChatMessage> ChatMessages => _chatMessages;
-        private string _chatInput = "";
-        public string ChatInput { get => _chatInput; set => SetField(ref _chatInput, value); }
-
         // ── DNS Benchmark ───────────────────────────────────────────────────────
         private ObservableCollection<DnsBenchmarkResult> _dnsResults = new();
         public ObservableCollection<DnsBenchmarkResult> DnsResults => _dnsResults;
@@ -178,7 +172,6 @@ namespace NetProve.ViewModels
         public ICommand ClearCacheCommand { get; }
         public ICommand RefreshProcessesCommand { get; }
         public ICommand ToggleAutoModeCommand { get; }
-        public ICommand SendChatCommand { get; }
         public ICommand RunDnsBenchmarkCommand { get; }
         public ICommand ApplyDnsCommand { get; }
         public ICommand RestoreDnsCommand { get; }
@@ -202,7 +195,6 @@ namespace NetProve.ViewModels
             ClearCacheCommand = new RelayCommand(async p => await ClearCacheAsync(p));
             RefreshProcessesCommand = new RelayCommand(async _ => await RefreshProcessesAsync());
             ToggleAutoModeCommand = new RelayCommand(_ => ToggleAutoMode());
-            SendChatCommand = new RelayCommand(_ => SendChat());
             RunDnsBenchmarkCommand = new RelayCommand(async _ => await RunDnsBenchmarkAsync());
             ApplyDnsCommand = new RelayCommand(async p => await ApplyDnsAsync(p));
             RestoreDnsCommand = new RelayCommand(async _ => await RestoreDnsAsync());
@@ -231,13 +223,14 @@ namespace NetProve.ViewModels
 
         private void LoadInitialData()
         {
+            // Delay initial loading to avoid slow startup
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await ScanCachesAsync();
-                    await RefreshProcessesAsync();
+                    await Task.Delay(3000); // Let UI render first
                     LoadReports();
+                    // Don't scan caches/processes at startup - they load on page visit
                 }
                 catch (Exception ex)
                 {
@@ -584,26 +577,6 @@ namespace NetProve.ViewModels
             ShowResult(true, AutoMode ? _loc["AutoModeOn"] : _loc["AutoModeOff"]);
         }
 
-        private void SendChat()
-        {
-            var input = ChatInput?.Trim();
-            if (string.IsNullOrEmpty(input)) return;
-
-            // Add user message
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
-            {
-                _chatMessages.Add(new ChatMessage { Text = input, IsUser = true });
-            });
-            ChatInput = "";
-
-            // Get AI response
-            var response = _engine.AIAssistant.GetResponse(input);
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
-            {
-                _chatMessages.Add(new ChatMessage { Text = response, IsUser = false });
-            });
-        }
-
         private async Task RunDnsBenchmarkAsync()
         {
             DnsBenchmarkRunning = true;
@@ -728,10 +701,11 @@ namespace NetProve.ViewModels
 
         private static void UpdateHistory(ObservableCollection<double> col, double value)
         {
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(() =>
             {
+                if (col.Count >= 60)
+                    col.RemoveAt(0);
                 col.Add(value);
-                while (col.Count > 60) col.RemoveAt(0);
             });
         }
     }

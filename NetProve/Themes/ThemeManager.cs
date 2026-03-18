@@ -30,8 +30,8 @@ namespace NetProve.Themes
             ["Warning"]       = C(0xF5, 0x9E, 0x0B),
             ["Danger"]        = C(0xEF, 0x44, 0x44),
             ["TextPrimary"]   = C(0xF1, 0xF5, 0xF9),
-            ["TextSub"]       = C(0x94, 0xA3, 0xB8),
-            ["TextMuted"]     = C(0x47, 0x55, 0x69),
+            ["TextSub"]       = C(0xBD, 0xC8, 0xD6),
+            ["TextMuted"]     = C(0x6B, 0x7B, 0x8D),
 
             // Template-internal colors
             ["NavHoverBg"]    = C(0x27, 0x33, 0x47),

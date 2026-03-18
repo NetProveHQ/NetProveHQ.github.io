@@ -83,7 +83,8 @@ namespace NetProve.Monitors
                 _diskTimeCounter = null;
             }
 
-            CpuName = GetCpuName();
+            // WMI query is slow — run on background thread
+            Task.Run(() => CpuName = GetCpuName());
         }
 
         private async Task MonitorLoop(CancellationToken ct)

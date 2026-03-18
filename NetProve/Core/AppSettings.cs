@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 
@@ -38,9 +39,9 @@ namespace NetProve.Core
         };
 
         // ── Monitoring intervals (ms) ─────────────────────────────────────────
-        public int SystemPollIntervalMs { get; set; } = 2000;
-        public int NetworkPollIntervalMs { get; set; } = 3000;
-        public int ProcessPollIntervalMs { get; set; } = 5000;
+        public int SystemPollIntervalMs { get; set; } = 3000;
+        public int NetworkPollIntervalMs { get; set; } = 5000;
+        public int ProcessPollIntervalMs { get; set; } = 10000;
 
         // ── Preferences ───────────────────────────────────────────────────────
         public bool AutoStartGamingMode { get; set; } = true;
@@ -48,7 +49,21 @@ namespace NetProve.Core
         public bool AutoCleanCacheOnLimit { get; set; } = false;
         public bool MinimizeToTray { get; set; } = true;
         public bool DarkTheme { get; set; } = true;
-        public string Language { get; set; } = "English";
+        public string Language { get; set; } = DetectSystemLanguage();
+
+        private static string DetectSystemLanguage()
+        {
+            var culture = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+            return culture switch
+            {
+                "tr" => "Turkish",
+                "zh" => "Chinese",
+                "ja" => "Japanese",
+                "es" => "Spanish",
+                "ru" => "Russian",
+                _ => "English"
+            };
+        }
         public string PingTarget { get; set; } = "8.8.8.8";
 
         // ── Auto mode ───────────────────────────────────────────────────────────

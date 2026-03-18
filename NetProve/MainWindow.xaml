@@ -22,8 +22,6 @@
         <conv:BytesToStringConverter x:Key="BytesStr"/>
         <conv:CacheUsageToColorConverter x:Key="CacheColor"/>
         <conv:BoolToActiveConverter x:Key="BoolActive" TrueText="ON" FalseText="OFF"/>
-        <conv:BoolToAlignmentConverter x:Key="BoolAlign"/>
-        <conv:BoolToChatBubbleBgConverter x:Key="ChatBubbleBg"/>
         <conv:PriorityToStringConverter x:Key="PriorityStr"/>
 
         <!-- ── Theme colors (replaced at runtime by ThemeManager) ────────── -->
@@ -514,6 +512,8 @@
                                  GroupName="Nav" Checked="NavBtn_Checked" Tag="System"/>
                     <RadioButton Content="{DynamicResource S_NavNetwork}"   Style="{StaticResource NavBtn}"
                                  GroupName="Nav" Checked="NavBtn_Checked" Tag="Network"/>
+                    <RadioButton Content="{DynamicResource S_NavDevices}"  Style="{StaticResource NavBtn}"
+                                 GroupName="Nav" Checked="NavBtn_Checked" Tag="Devices"/>
 
                     <TextBlock Text="{DynamicResource S_NavOptimize}" Style="{StaticResource Sub}"
                                Margin="22,16,0,4" FontSize="10" FontWeight="SemiBold"/>
@@ -535,11 +535,6 @@
                     <RadioButton Content="{DynamicResource S_NavReports}" Style="{StaticResource NavBtn}"
                                  GroupName="Nav" Checked="NavBtn_Checked" Tag="Reports"/>
 
-                    <TextBlock Text="TOOLS" Style="{StaticResource Sub}"
-                               Margin="22,16,0,4" FontSize="10" FontWeight="SemiBold"/>
-
-                    <RadioButton x:Name="NavAssistant" Content="{DynamicResource S_NavAssistant}" Style="{StaticResource NavBtn}"
-                                 GroupName="Nav" Checked="NavBtn_Checked" Tag="Assistant"/>
                 </StackPanel>
 
                 <!-- Language + Theme toggle -->
@@ -553,7 +548,17 @@
                                    FontSize="13" Cursor="Hand"
                                    Foreground="{DynamicResource TextPrimary}"
                                    MouseLeftButtonUp="BtnThemeToggle_Click"
-                                   Text="&#x2600; Light Mode"/>
+                                   Text=""/>
+                        <TextBlock x:Name="TbPinTaskbar" Margin="4,6,0,0"
+                                   FontSize="13" Cursor="Hand"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   MouseLeftButtonUp="BtnPinTaskbar_Click"
+                                   Text=""/>
+                        <TextBlock x:Name="TbRunAtStartup" Margin="4,6,0,0"
+                                   FontSize="13" Cursor="Hand"
+                                   Foreground="{DynamicResource TextPrimary}"
+                                   MouseLeftButtonUp="BtnRunAtStartup_Click"
+                                   Text=""/>
                     </StackPanel>
                 </Border>
 
@@ -612,7 +617,9 @@
                                 <TextBlock Text="{DynamicResource S_CPU}" Style="{StaticResource H2}" Margin="0,0,0,12"/>
                                 <ctrl:CircularGauge x:Name="GaugeCpu" Height="120" Width="120"
                                     HorizontalAlignment="Center" Label="Usage" Unit="%"
-                                    StrokeWidth="10" TrackColor="{DynamicResource TrackBg}"/>
+                                    StrokeWidth="10" TrackColor="{DynamicResource TrackBg}"
+                                    Foreground="{DynamicResource TextPrimary}"
+                                    LabelBrush="{DynamicResource TextSub}"/>
                                 <TextBlock x:Name="TbCpuText" Text="0%" Style="{StaticResource Sub}"
                                            HorizontalAlignment="Center" Margin="0,8,0,0"/>
                             </StackPanel>
@@ -626,7 +633,10 @@
                                 <ctrl:CircularGauge x:Name="GaugeRam" Height="120" Width="120"
                                     HorizontalAlignment="Center" Label="Usage" Unit="%"
                                     StrokeWidth="10"
-                                    ArcColor="#10B981"/>
+                                    ArcColor="#10B981"
+                                    TrackColor="{DynamicResource TrackBg}"
+                                    Foreground="{DynamicResource TextPrimary}"
+                                    LabelBrush="{DynamicResource TextSub}"/>
                                 <TextBlock x:Name="TbRamText" Style="{StaticResource Sub}"
                                            HorizontalAlignment="Center" Margin="0,8,0,0"/>
                             </StackPanel>
@@ -640,7 +650,10 @@
                                 <ctrl:CircularGauge x:Name="GaugeDisk" Height="120" Width="120"
                                     HorizontalAlignment="Center" Label="Activity" Unit="%"
                                     StrokeWidth="10"
-                                    ArcColor="#F59E0B"/>
+                                    ArcColor="#F59E0B"
+                                    TrackColor="{DynamicResource TrackBg}"
+                                    Foreground="{DynamicResource TextPrimary}"
+                                    LabelBrush="{DynamicResource TextSub}"/>
                                 <TextBlock x:Name="TbDiskText" Style="{StaticResource Sub}"
                                            HorizontalAlignment="Center" Margin="0,8,0,0"/>
                             </StackPanel>
@@ -653,7 +666,10 @@
                                 <ctrl:CircularGauge x:Name="GaugePing" Height="120" Width="120"
                                     HorizontalAlignment="Center" Label="Ping" Unit="ms"
                                     StrokeWidth="10" MaxValue="200"
-                                    ArcColor="#8B5CF6"/>
+                                    ArcColor="#8B5CF6"
+                                    TrackColor="{DynamicResource TrackBg}"
+                                    Foreground="{DynamicResource TextPrimary}"
+                                    LabelBrush="{DynamicResource TextSub}"/>
                                 <TextBlock x:Name="TbNetText" Style="{StaticResource Sub}"
                                            HorizontalAlignment="Center" Margin="0,8,0,0"/>
                             </StackPanel>
@@ -780,10 +796,10 @@
                             <WrapPanel>
                                 <Button x:Name="BtnOptimize" Style="{StaticResource PrimaryBtn}"
                                         Margin="0,0,10,8" Click="BtnOptimize_Click"/>
-                                <Button x:Name="BtnGaming" Content="🎮 Gaming Mode: OFF"
+                                <Button x:Name="BtnGaming" Content=""
                                         Style="{StaticResource ToggleBtn}" Margin="0,0,10,8"
                                         Click="BtnGaming_Click"/>
-                                <Button x:Name="BtnStreaming" Content="▶ Streaming Mode: OFF"
+                                <Button x:Name="BtnStreaming" Content=""
                                         Style="{StaticResource ToggleBtn}" Margin="0,0,10,8"
                                         Click="BtnStreaming_Click"/>
                                 <Button x:Name="BtnLagAnalysisQuick" Style="{StaticResource SecBtn}"
@@ -1077,7 +1093,7 @@
                                     <Border.Background>
                                         <SolidColorBrush x:Name="GameStatusBg" Color="#1B3B2A"/>
                                     </Border.Background>
-                                    <TextBlock x:Name="TbGameStatus" Text="No game" FontSize="12"
+                                    <TextBlock x:Name="TbGameStatus" Text="" FontSize="12"
                                                FontWeight="SemiBold" Foreground="{DynamicResource TextSub}"/>
                                 </Border>
                             </StackPanel>
@@ -1094,7 +1110,7 @@
                                 <TextBlock Text="{DynamicResource S_GamingMode}" Style="{StaticResource H2}" Margin="0,0,0,8"/>
                                 <TextBlock Style="{StaticResource Sub}" Margin="0,0,0,16"
                                     Text="{DynamicResource S_GamingModeDesc}"/>
-                                <Button x:Name="BtnGamingFull" Content="🎮 Enable Gaming Mode"
+                                <Button x:Name="BtnGamingFull" Content=""
                                         Style="{StaticResource PrimaryBtn}" HorizontalAlignment="Left"
                                         Click="BtnGaming_Click"/>
                             </StackPanel>
@@ -1104,7 +1120,7 @@
                                 <TextBlock Text="{DynamicResource S_StreamingMode}" Style="{StaticResource H2}" Margin="0,0,0,8"/>
                                 <TextBlock Style="{StaticResource Sub}" Margin="0,0,0,16"
                                     Text="{DynamicResource S_StreamingModeDesc}"/>
-                                <Button x:Name="BtnStreamingFull" Content="▶ Enable Streaming Mode"
+                                <Button x:Name="BtnStreamingFull" Content=""
                                         Style="{StaticResource SecBtn}" HorizontalAlignment="Left"
                                         Click="BtnStreaming_Click"/>
                             </StackPanel>
@@ -1143,7 +1159,7 @@
                                 <Border Grid.Column="2" Background="{DynamicResource InsetBg}" CornerRadius="8"
                                         Padding="16,12" Margin="8,0,0,0">
                                     <StackPanel>
-                                        <TextBlock Text="Visual Effects" Style="{StaticResource Sub}"
+                                        <TextBlock Text="{DynamicResource S_NagleAlgorithm}" Style="{StaticResource Sub}"
                                                    FontSize="11" FontWeight="SemiBold" Margin="0,0,0,8"/>
                                         <TextBlock x:Name="TbVisualFxStatus" Text="–" FontSize="13"
                                                    FontWeight="SemiBold" Foreground="{DynamicResource TextPrimary}"/>
@@ -1258,6 +1274,7 @@
                                                 Style="{StaticResource SecBtn}"
                                                 CommandParameter="{Binding Browser}"
                                                 Click="BtnClearCache_Click"
+                                                ToolTip="{DynamicResource S_TipClearCache}"
                                                 VerticalAlignment="Center"/>
                                     </Grid>
                                 </Border>
@@ -1443,7 +1460,7 @@
                     </Border>
 
                     <!-- Start button -->
-                    <Button x:Name="BtnRunSpeed" Content="▶ Run Speed Test"
+                    <Button x:Name="BtnRunSpeed" Content=""
                             Style="{StaticResource PrimaryBtn}" HorizontalAlignment="Center"
                             Padding="32,12" FontSize="15" Click="BtnRunSpeed_Click"/>
                 </StackPanel>
@@ -1547,71 +1564,80 @@
                     </Border>
                 </StackPanel>
 
-                <!-- ── PAGE: AI ASSISTANT ──────────────────────────────── -->
-                <Grid x:Name="PageAssistant" Visibility="Collapsed">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                <!-- ── PAGE: DEVICES ──────────────────────────────────── -->
+                <StackPanel x:Name="PageDevices" Visibility="Collapsed">
+                    <TextBlock Text="{DynamicResource S_NetworkDevices}" Style="{StaticResource H1}" Margin="0,0,0,8"/>
+                    <TextBlock Style="{StaticResource Sub}" Margin="0,0,0,16"
+                        Text="{DynamicResource S_NetworkDevicesDesc}"/>
 
-                    <!-- Header -->
-                    <StackPanel Grid.Row="0" Margin="0,0,0,16">
-                        <TextBlock Text="{DynamicResource S_AssistantTitle}" Style="{StaticResource H1}" Margin="0,0,0,4"/>
-                        <TextBlock Text="{DynamicResource S_AssistantSubtitle}" Style="{StaticResource Sub}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                        <Button x:Name="BtnScanNetwork" Content="" Style="{StaticResource PrimaryBtn}"
+                                Margin="0,0,12,0" Click="BtnScanNetwork_Click"/>
+                        <TextBlock x:Name="TbDeviceCount" Style="{StaticResource Sub}"
+                                   VerticalAlignment="Center" FontSize="13"/>
                     </StackPanel>
 
-                    <!-- Chat messages -->
-                    <Border Grid.Row="1" Style="{StaticResource Card}" Padding="12"
-                            MinHeight="400" MaxHeight="520">
-                        <ScrollViewer x:Name="ChatScroller" VerticalScrollBarVisibility="Auto">
-                            <ItemsControl x:Name="ChatList">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border CornerRadius="12" Padding="14,10" Margin="4,4,4,4"
-                                                MaxWidth="520"
-                                                HorizontalAlignment="{Binding IsUser, Converter={StaticResource BoolAlign}}"
-                                                Background="{Binding IsUser, Converter={StaticResource ChatBubbleBg}}">
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap"
-                                                           FontSize="13" Foreground="{DynamicResource TextPrimary}"/>
-                                                <TextBlock Text="{Binding Timestamp, StringFormat=HH:mm}"
-                                                           Style="{StaticResource Sub}" FontSize="9"
-                                                           HorizontalAlignment="Right" Margin="0,4,0,0"/>
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                    </Border>
+                    <!-- Device list -->
+                    <ItemsControl x:Name="DeviceList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Style="{StaticResource Card}" Margin="0,0,0,8">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="130"/>
+                                            <ColumnDefinition Width="150"/>
+                                            <ColumnDefinition Width="140"/>
+                                        </Grid.ColumnDefinitions>
 
-                    <!-- Input bar -->
-                    <Border Grid.Row="2" Style="{StaticResource Card}" Padding="12" Margin="0,12,0,0">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TbChatInput" Grid.Column="0"
-                                     FontSize="13" Padding="12,10"
-                                     Background="{DynamicResource InsetBg}"
-                                     Foreground="{DynamicResource TextPrimary}"
-                                     BorderBrush="{DynamicResource Border}" BorderThickness="1"
-                                     VerticalContentAlignment="Center"
-                                     KeyDown="TbChatInput_KeyDown">
-                                <TextBox.Resources>
-                                    <Style TargetType="Border">
-                                        <Setter Property="CornerRadius" Value="8"/>
-                                    </Style>
-                                </TextBox.Resources>
-                            </TextBox>
-                            <Button x:Name="BtnSendChat" Grid.Column="1" Style="{StaticResource PrimaryBtn}"
-                                    Margin="8,0,0,0" Padding="16,10"
-                                    Click="BtnSendChat_Click"/>
-                        </Grid>
-                    </Border>
-                </Grid>
+                                        <!-- Name + Type + Tag -->
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Tag}" FontSize="14" Margin="0,0,4,0"
+                                                           VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding DeviceType}" FontSize="14"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource TextPrimary}"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding HostName}" FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource Accent}" Margin="0,3,0,0"/>
+                                            <TextBlock Text="{Binding Vendor}" Style="{StaticResource Sub}"
+                                                       FontSize="11" Margin="0,1,0,0"/>
+                                        </StackPanel>
+
+                                        <!-- IP -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource Sub}" FontSize="10" FontWeight="SemiBold"
+                                                       Text="{DynamicResource S_IPAddress}"/>
+                                            <TextBlock Text="{Binding IpAddress}" FontSize="13"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextPrimary}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+
+                                        <!-- Bandwidth / Activity -->
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource Sub}" FontSize="10" FontWeight="SemiBold"
+                                                       Text="{DynamicResource S_Activity}"/>
+                                            <TextBlock Text="{Binding BandwidthUsage}" FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource TextPrimary}" Margin="0,2,0,0"/>
+                                        </StackPanel>
+
+                                        <!-- MAC -->
+                                        <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                            <TextBlock Style="{StaticResource Sub}" FontSize="10" FontWeight="SemiBold"
+                                                       Text="{DynamicResource S_MACAddress}"/>
+                                            <TextBlock Text="{Binding MacAddress}" FontSize="11"
+                                                       Foreground="{DynamicResource TextSub}" Margin="0,2,0,0"
+                                                       FontFamily="Consolas"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
 
             </Grid>
         </ScrollViewer>

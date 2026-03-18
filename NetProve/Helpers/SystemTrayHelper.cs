@@ -29,7 +29,7 @@ namespace NetProve.Helpers
             _notifyIcon = new NotifyIcon
             {
                 Text = "NetProve — Performance Optimizer",
-                Visible = false
+                Visible = true // Always visible in tray
             };
 
             // Try to load application icon, fallback to system icon
@@ -50,7 +50,7 @@ namespace NetProve.Helpers
             var menu = new ContextMenuStrip();
 
             var showItem = new ToolStripMenuItem("Show NetProve");
-            showItem.Click += (s, e) => RestoreWindow();
+            showItem.Click += (s, e) => ShowOrActivateWindow();
             showItem.Font = new Font(showItem.Font, System.Drawing.FontStyle.Bold);
             menu.Items.Add(showItem);
 
@@ -61,36 +61,61 @@ namespace NetProve.Helpers
             menu.Items.Add(exitItem);
 
             _notifyIcon.ContextMenuStrip = menu;
-            _notifyIcon.DoubleClick += (s, e) => RestoreWindow();
+
+            // Single left-click: show/restore window
+            _notifyIcon.MouseClick += (s, e) =>
+            {
+                if (e.Button == MouseButtons.Left)
+                    ShowOrActivateWindow();
+            };
+
+            // Double-click: also show/restore window
+            _notifyIcon.MouseDoubleClick += (s, e) =>
+            {
+                if (e.Button == MouseButtons.Left)
+                    ShowOrActivateWindow();
+            };
         }
 
         /// <summary>
-        /// Minimizes the window to system tray.
+        /// Shows the window if hidden, or activates/brings to front if already visible.
+        /// Uses a Topmost trick to force the window in front of other applications on Windows.
+        /// </summary>
+        public void ShowOrActivateWindow()
+        {
+            if (!_mainWindow.IsVisible)
+            {
+                _mainWindow.Show();
+            }
+
+            if (_mainWindow.WindowState == WindowState.Minimized)
+            {
+                _mainWindow.WindowState = WindowState.Normal;
+            }
+
+            // Force to front using Topmost trick — required on Windows when another
+            // app currently has focus (Activate() alone is often ignored by the OS).
+            _mainWindow.Topmost = true;
+            _mainWindow.Activate();
+            _mainWindow.Focus();
+            _mainWindow.Topmost = false;
+        }
+
+        /// <summary>
+        /// Hides the window but keeps the app running in tray.
+        /// Called when the user presses the close (X) button.
         /// </summary>
         public void MinimizeToTray()
         {
             _mainWindow.Hide();
             if (_notifyIcon != null)
             {
-                _notifyIcon.Visible = true;
                 _notifyIcon.ShowBalloonTip(
                     2000,
                     "NetProve",
                     _loc["AppRunning"],
                     ToolTipIcon.Info);
             }
-        }
-
-        /// <summary>
-        /// Restores the window from system tray.
-        /// </summary>
-        public void RestoreWindow()
-        {
-            _mainWindow.Show();
-            _mainWindow.WindowState = WindowState.Normal;
-            _mainWindow.Activate();
-            if (_notifyIcon != null)
-                _notifyIcon.Visible = false;
         }
 
         /// <summary>

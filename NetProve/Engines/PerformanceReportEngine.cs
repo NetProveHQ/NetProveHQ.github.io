@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using NetProve.Core;
+using NetProve.Localization;
 using NetProve.Models;
 
 namespace NetProve.Engines
@@ -19,6 +20,7 @@ namespace NetProve.Engines
             "NetProve", "Reports");
 
         private readonly List<PerformanceReport> _history = new();
+        private readonly LocalizationManager _loc = LocalizationManager.Instance;
 
         public PerformanceReportEngine()
         {
@@ -50,36 +52,57 @@ namespace NetProve.Engines
             float peakCpu = cpu.Count > 0 ? cpu.Max() : 0;
             float peakRam = ram.Count > 0 ? ram.Max() : 0;
 
-            // Determine quality rating
+            // Determine quality rating with realistic gaming thresholds
             string rating, emoji;
             double score = 100;
-            if (avgPl >= 5) score -= 40; else if (avgPl >= 2) score -= 20;
-            if (avgPing >= 150) score -= 30; else if (avgPing >= 80) score -= 15;
-            if (avgJitter >= 30) score -= 20; else if (avgJitter >= 15) score -= 10;
-            if (session.LagSpikeCount > 10) score -= 20; else if (session.LagSpikeCount > 5) score -= 10;
 
-            if (score >= 90) { rating = "Excellent"; emoji = "★★★★★"; }
-            else if (score >= 75) { rating = "Good"; emoji = "★★★★☆"; }
-            else if (score >= 55) { rating = "Fair"; emoji = "★★★☆☆"; }
-            else if (score >= 35) { rating = "Poor"; emoji = "★★☆☆☆"; }
-            else { rating = "Very Poor"; emoji = "★☆☆☆☆"; }
+            // Packet loss (very impactful for gaming)
+            if (avgPl >= 3) score -= 40;
+            else if (avgPl >= 1) score -= 25;
+            else if (avgPl >= 0.1) score -= 10;
 
-            // Build suggestions
+            // Ping (gaming-sensitive thresholds)
+            if (avgPing >= 120) score -= 35;
+            else if (avgPing >= 70) score -= 20;
+            else if (avgPing >= 40) score -= 10;
+            else if (avgPing >= 20) score -= 3;
+
+            // Jitter
+            if (avgJitter >= 25) score -= 25;
+            else if (avgJitter >= 12) score -= 15;
+            else if (avgJitter >= 5) score -= 5;
+
+            // Lag spikes
+            if (session.LagSpikeCount > 10) score -= 20;
+            else if (session.LagSpikeCount > 3) score -= 10;
+            else if (session.LagSpikeCount > 0) score -= 5;
+
+            // CPU/RAM pressure during session
+            if (peakCpu >= 95) score -= 5;
+            if (peakRam >= 95) score -= 5;
+
+            if (score >= 90) { rating = _loc["RatingExcellent"]; emoji = "★★★★★"; }
+            else if (score >= 75) { rating = _loc["RatingGood"]; emoji = "★★★★☆"; }
+            else if (score >= 55) { rating = _loc["RatingFair"]; emoji = "★★★☆☆"; }
+            else if (score >= 35) { rating = _loc["RatingPoor"]; emoji = "★★☆☆☆"; }
+            else { rating = _loc["RatingVeryPoor"]; emoji = "★☆☆☆☆"; }
+
+            // Build suggestions (localized)
             var suggestions = new List<string>();
-            if (avgPl >= 2)
-                suggestions.Add("High packet loss detected – consider switching to a wired connection.");
-            if (avgPing >= 80)
-                suggestions.Add("Average latency is high – try servers closer to your region.");
-            if (avgJitter >= 20)
-                suggestions.Add("Unstable ping detected – check for background downloads or Wi-Fi interference.");
+            if (avgPl >= 0.5)
+                suggestions.Add(_loc["SugPacketLoss"]);
+            if (avgPing >= 50)
+                suggestions.Add(_loc["SugHighPing"]);
+            if (avgJitter >= 10)
+                suggestions.Add(_loc["SugJitter"]);
             if (session.LagSpikeCount > 5)
-                suggestions.Add("Multiple lag spikes occurred – enable Gaming Mode for the next session.");
+                suggestions.Add(_loc["SugLagSpikes"]);
             if (peakCpu >= 90)
-                suggestions.Add("CPU peaked at maximum – consider closing non-essential applications.");
+                suggestions.Add(_loc["SugCpuPeak"]);
             if (peakRam >= 90)
-                suggestions.Add("RAM was near capacity – use the RAM Optimizer before gaming.");
+                suggestions.Add(_loc["SugRamPeak"]);
             if (suggestions.Count == 0)
-                suggestions.Add("Great session! Performance was stable throughout.");
+                suggestions.Add(_loc["SugGreatSession"]);
 
             var report = new PerformanceReport
             {

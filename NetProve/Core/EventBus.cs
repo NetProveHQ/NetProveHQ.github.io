@@ -106,4 +106,7 @@ namespace NetProve.Core
     {
         public bool Enabled { get; init; }
     }
+
+    /// <summary>Fired when lag prediction stabilizes — dismiss the warning banner.</summary>
+    public sealed class LagWarningDismissEvent { }
 }

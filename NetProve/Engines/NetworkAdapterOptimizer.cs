@@ -10,15 +10,17 @@ namespace NetProve.Engines
 {
     /// <summary>
     /// Optimizes network adapter settings: Nagle algorithm, Wi-Fi band detection,
-    /// network stack reset. All changes are reversible.
+    /// network stack reset. Only modifies active physical adapters.
+    /// All changes are reversible.
     /// </summary>
     public sealed class NetworkAdapterOptimizer
     {
         private const string TcpipInterfacesKey = @"SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces";
 
         /// <summary>
-        /// Disable Nagle algorithm on all network interfaces for lower latency.
-        /// Sets TcpAckFrequency=1 and TCPNoDelay=1 on each interface.
+        /// Disable Nagle algorithm only on active physical network interfaces.
+        /// Skips loopback, tunnel, and inactive interfaces.
+        /// Sets TcpAckFrequency=1 and TCPNoDelay=1.
         /// </summary>
         public Task<bool> DisableNagleAsync()
         {
@@ -26,21 +28,35 @@ namespace NetProve.Engines
             {
                 try
                 {
+                    // Get GUIDs of active physical adapters only
+                    var activeGuids = GetActivePhysicalAdapterGuids();
+
                     using var interfaces = Registry.LocalMachine.OpenSubKey(TcpipInterfacesKey, false);
                     if (interfaces == null) return false;
 
+                    int modified = 0;
                     foreach (var subKeyName in interfaces.GetSubKeyNames())
                     {
+                        // Only apply to active physical adapters
+                        if (!activeGuids.Contains(subKeyName, StringComparer.OrdinalIgnoreCase))
+                            continue;
+
                         try
                         {
                             using var subKey = Registry.LocalMachine.OpenSubKey(
                                 $@"{TcpipInterfacesKey}\{subKeyName}", true);
                             if (subKey == null) continue;
 
+                            // Verify this interface has an IP address (actually in use)
+                            var hasIp = subKey.GetValue("DhcpIPAddress") as string ??
+                                        subKey.GetValue("IPAddress") as string;
+                            if (string.IsNullOrEmpty(hasIp) || hasIp == "0.0.0.0") continue;
+
                             subKey.SetValue("TcpAckFrequency", 1, RegistryValueKind.DWord);
                             subKey.SetValue("TCPNoDelay", 1, RegistryValueKind.DWord);
+                            modified++;
                         }
-                        catch { /* Skip interfaces we can't modify */ }
+                        catch { }
                     }
 
                     AppSettings.Instance.NagleDisabled = true;
@@ -49,7 +65,7 @@ namespace NetProve.Engines
                     EventBus.Instance.Publish(new OptimizationAppliedEvent
                     {
                         ActionName = "Nagle Disabled",
-                        Description = "Nagle algorithm disabled on all interfaces for lower latency."
+                        Description = $"Nagle disabled on {modified} active adapter(s)."
                     });
                     return true;
                 }
@@ -58,7 +74,8 @@ namespace NetProve.Engines
         }
 
         /// <summary>
-        /// Re-enable Nagle algorithm by removing custom registry values.
+        /// Re-enable Nagle algorithm by removing custom registry values
+        /// from all interfaces (safe cleanup).
         /// </summary>
         public Task<bool> EnableNagleAsync()
         {
@@ -89,7 +106,7 @@ namespace NetProve.Engines
                     EventBus.Instance.Publish(new OptimizationAppliedEvent
                     {
                         ActionName = "Nagle Enabled",
-                        Description = "Nagle algorithm restored to default on all interfaces."
+                        Description = "Nagle algorithm restored to default."
                     });
                     return true;
                 }
@@ -114,7 +131,6 @@ namespace NetProve.Engines
                     var output = p?.StandardOutput.ReadToEnd() ?? "";
                     p?.WaitForExit(5000);
 
-                    // Parse channel or radio type
                     foreach (var line in output.Split('\n'))
                     {
                         var trimmed = line.Trim();
@@ -136,7 +152,6 @@ namespace NetProve.Engines
                         }
                     }
 
-                    // Check if no Wi-Fi at all
                     var wifiAdapter = NetworkInterface.GetAllNetworkInterfaces()
                         .Any(ni => ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 &&
                                    ni.OperationalStatus == OperationalStatus.Up);
@@ -168,6 +183,34 @@ namespace NetProve.Engines
                 }
                 catch { return false; }
             });
+        }
+
+        /// <summary>
+        /// Gets the interface GUIDs of active physical (non-virtual) adapters.
+        /// </summary>
+        private static string[] GetActivePhysicalAdapterGuids()
+        {
+            try
+            {
+                return NetworkInterface.GetAllNetworkInterfaces()
+                    .Where(ni =>
+                        ni.OperationalStatus == OperationalStatus.Up &&
+                        (ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet ||
+                         ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211) &&
+                        !ni.Description.Contains("Virtual", StringComparison.OrdinalIgnoreCase) &&
+                        !ni.Description.Contains("VPN", StringComparison.OrdinalIgnoreCase) &&
+                        !ni.Description.Contains("Hyper-V", StringComparison.OrdinalIgnoreCase) &&
+                        !ni.Description.Contains("VMware", StringComparison.OrdinalIgnoreCase) &&
+                        !ni.Description.Contains("VirtualBox", StringComparison.OrdinalIgnoreCase) &&
+                        !ni.Description.Contains("Loopback", StringComparison.OrdinalIgnoreCase))
+                    .Select(ni => ni.Id) // GUID format like {XXXXXXXX-XXXX-...}
+                    .Select(id => id.Trim('{', '}'))
+                    .ToArray();
+            }
+            catch
+            {
+                return Array.Empty<string>();
+            }
         }
 
         private static void RunCmd(string exe, string args)

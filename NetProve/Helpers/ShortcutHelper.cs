@@ -7,7 +7,7 @@ using System.Text;
 namespace NetProve.Helpers
 {
     /// <summary>
-    /// Creates a desktop shortcut for the application on first run.
+    /// Creates shortcuts for the application: desktop, Start Menu, and Windows Startup.
     /// Uses COM IShellLink — no external dependencies.
     /// </summary>
     public static class ShortcutHelper
@@ -42,46 +42,96 @@ namespace NetProve.Helpers
             void SetPath([MarshalAs(UnmanagedType.LPWStr)] string pszFile);
         }
 
-        /// <summary>
-        /// Creates a desktop shortcut if one doesn't already exist.
-        /// Returns true if shortcut was created, false if it already existed.
-        /// </summary>
+        private static string ExePath => Environment.ProcessPath ?? "";
+        private static string WorkingDir => Path.GetDirectoryName(ExePath) ?? "";
+        private static string IconPath => Path.Combine(WorkingDir, "app.ico");
+
+        // ── Shortcut paths ──────────────────────────────────────────────────
+        private static string DesktopShortcut =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "NetProve.lnk");
+
+        private static string StartMenuShortcut =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.StartMenu), "Programs", "NetProve.lnk");
+
+        private static string StartupShortcut =>
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "NetProve.lnk");
+
+        // ── Desktop shortcut ────────────────────────────────────────────────
         public static bool CreateDesktopShortcutIfNeeded()
+        {
+            if (File.Exists(DesktopShortcut)) return false;
+            return CreateShortcut(DesktopShortcut);
+        }
+
+        // ── Start Menu shortcut ─────────────────────────────────────────────
+        public static bool IsStartMenuPinned => File.Exists(StartMenuShortcut);
+
+        public static bool PinToStartMenu()
+        {
+            if (File.Exists(StartMenuShortcut)) return false;
+            return CreateShortcut(StartMenuShortcut);
+        }
+
+        public static bool UnpinFromStartMenu()
         {
             try
             {
-                var desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
-                var shortcutPath = Path.Combine(desktopPath, "NetProve.lnk");
+                if (File.Exists(StartMenuShortcut))
+                    File.Delete(StartMenuShortcut);
+                return true;
+            }
+            catch { return false; }
+        }
 
-                // Don't recreate if already exists
-                if (File.Exists(shortcutPath)) return false;
+        // ── Windows Startup ─────────────────────────────────────────────────
+        public static bool IsStartupEnabled => File.Exists(StartupShortcut);
 
-                var exePath = Environment.ProcessPath;
+        public static bool EnableStartup()
+        {
+            if (File.Exists(StartupShortcut)) return false;
+            return CreateShortcut(StartupShortcut);
+        }
+
+        public static bool DisableStartup()
+        {
+            try
+            {
+                if (File.Exists(StartupShortcut))
+                    File.Delete(StartupShortcut);
+                return true;
+            }
+            catch { return false; }
+        }
+
+        // ── Core shortcut creation ──────────────────────────────────────────
+        private static bool CreateShortcut(string shortcutPath)
+        {
+            try
+            {
+                var exePath = ExePath;
                 if (string.IsNullOrEmpty(exePath)) return false;
 
-                var workingDir = Path.GetDirectoryName(exePath);
-                var iconPath = Path.Combine(workingDir ?? "", "app.ico");
+                // Ensure directory exists
+                var dir = Path.GetDirectoryName(shortcutPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
 
                 var link = (IShellLink)new ShellLink();
                 link.SetPath(exePath);
                 link.SetDescription("NetProve — Gaming & Network Performance Optimizer");
-                link.SetWorkingDirectory(workingDir ?? "");
+                link.SetWorkingDirectory(WorkingDir);
 
-                // Use app.ico if available
-                if (File.Exists(iconPath))
-                    link.SetIconLocation(iconPath, 0);
+                if (File.Exists(IconPath))
+                    link.SetIconLocation(IconPath, 0);
                 else
                     link.SetIconLocation(exePath, 0);
 
-                // Save the shortcut
                 var file = (IPersistFile)link;
                 file.Save(shortcutPath, false);
-
                 return true;
             }
             catch
             {
-                // Non-critical — don't crash the app if shortcut fails
                 return false;
             }
         }

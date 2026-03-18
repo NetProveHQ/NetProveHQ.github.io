@@ -32,7 +32,6 @@ namespace NetProve.Core
 
         // ── New sub-systems ─────────────────────────────────────────────────────
         public AutoOptimizer AutoOptimizer { get; } = new();
-        public AIAssistantEngine AIAssistant { get; } = new();
         public PowerPlanManager PowerPlan { get; } = new();
         public DnsBenchmark DnsBenchmark { get; } = new();
         public NetworkAdapterOptimizer AdapterOptimizer { get; } = new();
