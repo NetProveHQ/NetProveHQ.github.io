@@ -388,13 +388,22 @@ namespace NetProve.Engines
                     await CoreEngine.Instance.ProcessManager.ThrottleBackgroundProcessesAsync();
                     _lastProcessThrottle = DateTime.Now;
 
-                    // 8. Set game process to High priority
+                    // 8. Set game process to High priority + QoS
                     try
                     {
-                        await CoreEngine.Instance.NetworkOptimizer.PrioritizeGameProcessAsync(e.ProcessId);
+                        await CoreEngine.Instance.NetworkOptimizer.ApplyGameQoSAsync(e.ProcessId);
                         _lastGamePrioritize = DateTime.Now;
                     }
                     catch { }
+
+                    // 9. Wi-Fi power saving disable (10-100ms spike reduction)
+                    await CoreEngine.Instance.AdapterOptimizer.DisableWifiPowerSaveAsync();
+
+                    // 10. Stop Windows P2P update sharing
+                    await CoreEngine.Instance.AdapterOptimizer.DisableDeliveryOptimizationAsync();
+
+                    // 11. Reduce NIC interrupt moderation (~1-2ms)
+                    await CoreEngine.Instance.AdapterOptimizer.ReduceInterruptModerationAsync();
                 }
                 catch { }
             });
@@ -423,6 +432,14 @@ namespace NetProve.Engines
                         await CoreEngine.Instance.AdapterOptimizer.EnableNagleAsync();
                         _nagleDisabled = false;
                     }
+
+                    // Remove QoS gaming policy
+                    await CoreEngine.Instance.NetworkOptimizer.RemoveGameQoSAsync();
+
+                    // Restore Wi-Fi, Delivery Optimization, Interrupt Moderation
+                    await CoreEngine.Instance.AdapterOptimizer.RestoreWifiPowerSaveAsync();
+                    await CoreEngine.Instance.AdapterOptimizer.RestoreDeliveryOptimizationAsync();
+                    await CoreEngine.Instance.AdapterOptimizer.RestoreInterruptModerationAsync();
 
                     // Restore visual effects
                     await CoreEngine.Instance.PowerPlan.RestoreVisualEffectsAsync();

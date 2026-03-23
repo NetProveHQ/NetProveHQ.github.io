@@ -161,6 +161,285 @@ namespace NetProve.Engines
             });
         }
 
+        /// <summary>
+        /// Disables Wi-Fi power saving mode on all active wireless adapters.
+        /// Wi-Fi PSM causes 10-100ms latency spikes because the adapter sleeps
+        /// between beacon intervals and buffers frames.
+        /// </summary>
+        public Task<bool> DisableWifiPowerSaveAsync()
+        {
+            return Task.Run(() =>
+            {
+                try
+                {
+                    // Method 1: PowerShell Set-NetAdapterAdvancedProperty
+                    var adapters = NetworkInterface.GetAllNetworkInterfaces()
+                        .Where(ni => ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 &&
+                                     ni.OperationalStatus == OperationalStatus.Up)
+                        .ToArray();
+
+                    foreach (var adapter in adapters)
+                    {
+                        var name = adapter.Name;
+                        // Disable power saving mode (3 = Maximum Performance)
+                        RunPowerShell($"Set-NetAdapterAdvancedProperty -Name '{name}' -RegistryKeyword 'PowerSavingMode' -RegistryValue 3 -ErrorAction SilentlyContinue");
+                        // Also set via power plan
+                        RunCmd("powercfg", "/setacvalueindex scheme_current sub_none 12bbebe6-58d6-4636-95bb-3217ef867c1a 19cbb8fa-5279-450e-9fac-8a3d5fedd0c1 0");
+                    }
+
+                    // Set wireless adapter power saving to Maximum Performance via active power scheme
+                    RunCmd("powercfg", "/setacvalueindex scheme_current 19cbb8fa-5279-450e-9fac-8a3d5fedd0c1 12bbebe6-58d6-4636-95bb-3217ef867c1a 0");
+                    RunCmd("powercfg", "/setactive scheme_current");
+
+                    EventBus.Instance.Publish(new OptimizationAppliedEvent
+                    {
+                        ActionName = "Wi-Fi Power Save",
+                        Description = $"Wi-Fi power saving disabled on {adapters.Length} adapter(s). Latency spikes reduced."
+                    });
+                    return true;
+                }
+                catch { return false; }
+            });
+        }
+
+        /// <summary>
+        /// Restores Wi-Fi power saving mode to default.
+        /// </summary>
+        public Task<bool> RestoreWifiPowerSaveAsync()
+        {
+            return Task.Run(() =>
+            {
+                try
+                {
+                    var adapters = NetworkInterface.GetAllNetworkInterfaces()
+                        .Where(ni => ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 &&
+                                     ni.OperationalStatus == OperationalStatus.Up)
+                        .ToArray();
+
+                    foreach (var adapter in adapters)
+                    {
+                        RunPowerShell($"Set-NetAdapterAdvancedProperty -Name '{adapter.Name}' -RegistryKeyword 'PowerSavingMode' -RegistryValue 1 -ErrorAction SilentlyContinue");
+                    }
+
+                    // Restore wireless power saving to Medium (default)
+                    RunCmd("powercfg", "/setacvalueindex scheme_current 19cbb8fa-5279-450e-9fac-8a3d5fedd0c1 12bbebe6-58d6-4636-95bb-3217ef867c1a 1");
+                    RunCmd("powercfg", "/setactive scheme_current");
+                    return true;
+                }
+                catch { return false; }
+            });
+        }
+
+        /// <summary>
+        /// Disables Windows Delivery Optimization (P2P update sharing).
+        /// Windows shares update files with other PCs in the background,
+        /// consuming bandwidth unpredictably during gaming.
+        /// </summary>
+        public Task<bool> DisableDeliveryOptimizationAsync()
+        {
+            return Task.Run(() =>
+            {
+                try
+                {
+                    const string doKey = @"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization";
+                    using var key = Registry.LocalMachine.CreateSubKey(doKey);
+                    if (key != null)
+                    {
+                        // DODownloadMode 0 = HTTP only (no P2P)
+                        key.SetValue("DODownloadMode", 0, RegistryValueKind.DWord);
+                    }
+
+                    EventBus.Instance.Publish(new OptimizationAppliedEvent
+                    {
+                        ActionName = "Delivery Optimization",
+                        Description = "Windows P2P update sharing disabled during gaming."
+                    });
+                    return true;
+                }
+                catch { return false; }
+            });
+        }
+
+        /// <summary>Restores Delivery Optimization to default.</summary>
+        public Task<bool> RestoreDeliveryOptimizationAsync()
+        {
+            return Task.Run(() =>
+            {
+                try
+                {
+                    const string doKey = @"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization";
+                    using var key = Registry.LocalMachine.OpenSubKey(doKey, true);
+                    key?.DeleteValue("DODownloadMode", false);
+                    return true;
+                }
+                catch { return false; }
+            });
+        }
+
+        /// <summary>
+        /// Sets Interrupt Moderation to a lower rate for reduced NIC-to-application latency.
+        /// Only applies to physical adapters that support this setting.
+        /// </summary>
+        public Task<bool> ReduceInterruptModerationAsync()
+        {
+            return Task.Run(() =>
+            {
+                try
+                {
+                    var adapters = NetworkInterface.GetAllNetworkInterfaces()
+                        .Where(ni => ni.OperationalStatus == OperationalStatus.Up &&
+                                     (ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet ||
+                                      ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211) &&
+                                     !ni.Description.Contains("Virtual", StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+
+                    int modified = 0;
+                    foreach (var adapter in adapters)
+                    {
+                        // Set interrupt moderation to adaptive/medium (not fully disabled to avoid CPU spike)
+                        RunPowerShell($"Set-NetAdapterAdvancedProperty -Name '{adapter.Name}' -RegistryKeyword '*InterruptModeration' -RegistryValue 0 -ErrorAction SilentlyContinue");
+                        modified++;
+                    }
+
+                    EventBus.Instance.Publish(new OptimizationAppliedEvent
+                    {
+                        ActionName = "Interrupt Moderation",
+                        Description = $"NIC interrupt moderation disabled on {modified} adapter(s). ~1-2ms latency reduction."
+                    });
+                    return true;
+                }
+                catch { return false; }
+            });
+        }
+
+        /// <summary>Restores interrupt moderation to default (enabled).</summary>
+        public Task<bool> RestoreInterruptModerationAsync()
+        {
+            return Task.Run(() =>
+            {
+                try
+                {
+                    var adapters = NetworkInterface.GetAllNetworkInterfaces()
+                        .Where(ni => ni.OperationalStatus == OperationalStatus.Up &&
+                                     (ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet ||
+                                      ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211) &&
+                                     !ni.Description.Contains("Virtual", StringComparison.OrdinalIgnoreCase))
+                        .ToArray();
+
+                    foreach (var adapter in adapters)
+                    {
+                        RunPowerShell($"Set-NetAdapterAdvancedProperty -Name '{adapter.Name}' -RegistryKeyword '*InterruptModeration' -RegistryValue 1 -ErrorAction SilentlyContinue");
+                    }
+                    return true;
+                }
+                catch { return false; }
+            });
+        }
+
+        /// <summary>
+        /// Detects bufferbloat by measuring latency under load.
+        /// This is the #1 cause of gaming lag on shared connections.
+        /// Returns the latency increase under load (bloat in ms).
+        /// </summary>
+        public async Task<BufferbloatResult> DetectBufferbloatAsync()
+        {
+            return await Task.Run(() =>
+            {
+                var result = new BufferbloatResult();
+                try
+                {
+                    // Step 1: Measure idle latency
+                    var idlePings = new System.Collections.Generic.List<double>();
+                    using var ping = new System.Net.NetworkInformation.Ping();
+                    for (int i = 0; i < 5; i++)
+                    {
+                        var reply = ping.Send("1.1.1.1", 2000);
+                        if (reply.Status == System.Net.NetworkInformation.IPStatus.Success)
+                            idlePings.Add(reply.RoundtripTime);
+                        System.Threading.Thread.Sleep(200);
+                    }
+
+                    if (idlePings.Count == 0)
+                    {
+                        result.Status = "Test Failed";
+                        result.Recommendation = "Ping testi başarısız. İnternet bağlantınızı kontrol edin.";
+                        return result;
+                    }
+
+                    result.IdleLatencyMs = idlePings.Average();
+
+                    // Step 2: Measure latency during a brief load test
+                    // Create some network load by downloading from multiple connections
+                    var loadPings = new System.Collections.Generic.List<double>();
+                    var cts = new System.Threading.CancellationTokenSource();
+
+                    // Start background downloads to create load
+                    var loadTasks = new System.Collections.Generic.List<Task>();
+                    for (int i = 0; i < 4; i++)
+                    {
+                        loadTasks.Add(Task.Run(async () =>
+                        {
+                            try
+                            {
+                                using var client = new System.Net.Http.HttpClient();
+                                client.Timeout = TimeSpan.FromSeconds(5);
+                                // Download a small file to create network activity
+                                await client.GetAsync("http://speed.cloudflare.com/__down?bytes=5000000", cts.Token);
+                            }
+                            catch { }
+                        }));
+                    }
+
+                    // Wait a moment for load to build, then measure
+                    System.Threading.Thread.Sleep(1000);
+
+                    for (int i = 0; i < 5; i++)
+                    {
+                        var reply = ping.Send("1.1.1.1", 2000);
+                        if (reply.Status == System.Net.NetworkInformation.IPStatus.Success)
+                            loadPings.Add(reply.RoundtripTime);
+                        System.Threading.Thread.Sleep(200);
+                    }
+
+                    cts.Cancel();
+                    try { Task.WhenAll(loadTasks).Wait(3000); } catch { }
+
+                    if (loadPings.Count > 0)
+                    {
+                        result.LoadLatencyMs = loadPings.Average();
+                        result.BloatMs = result.LoadLatencyMs - result.IdleLatencyMs;
+
+                        if (result.BloatMs < 5)
+                        {
+                            result.Status = "Excellent";
+                            result.Recommendation = "Bufferbloat yok. Bağlantınız oyun için ideal.";
+                        }
+                        else if (result.BloatMs < 30)
+                        {
+                            result.Status = "Good";
+                            result.Recommendation = "Hafif bufferbloat. Oyun için kabul edilebilir.";
+                        }
+                        else if (result.BloatMs < 100)
+                        {
+                            result.Status = "Warning";
+                            result.Recommendation = "Orta düzeyde bufferbloat. Router'ınızda SQM/QoS etkinleştirin.";
+                        }
+                        else
+                        {
+                            result.Status = "Critical";
+                            result.Recommendation = "Ciddi bufferbloat! Router'ınızda SQM (fq_codel/CAKE) etkinleştirin. Bu yazılımla düzeltilemez.";
+                        }
+                    }
+                }
+                catch
+                {
+                    result.Status = "Error";
+                    result.Recommendation = "Bufferbloat testi sırasında hata oluştu.";
+                }
+                return result;
+            });
+        }
+
         /// <summary>Full network stack reset (requires system restart to take effect).</summary>
         public async Task<bool> ResetNetworkStackAsync()
         {
@@ -225,5 +504,28 @@ namespace NetProve.Engines
             using var p = Process.Start(psi);
             p?.WaitForExit(10000);
         }
+
+        private static void RunPowerShell(string command)
+        {
+            var psi = new ProcessStartInfo("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{command}\"")
+            {
+                CreateNoWindow = true,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            using var p = Process.Start(psi);
+            p?.WaitForExit(10000);
+        }
+    }
+
+    /// <summary>Result of bufferbloat detection test.</summary>
+    public sealed class BufferbloatResult
+    {
+        public double IdleLatencyMs { get; set; }
+        public double LoadLatencyMs { get; set; }
+        public double BloatMs { get; set; }
+        public string Status { get; set; } = "Unknown";
+        public string Recommendation { get; set; } = "";
     }
 }

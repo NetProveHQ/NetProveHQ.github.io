@@ -85,10 +85,23 @@ namespace NetProve.Engines
                 await CoreEngine.Instance.AdapterOptimizer.DisableNagleAsync();
                 await CoreEngine.Instance.PowerPlan.ReduceVisualEffectsAsync();
 
+                // Wi-Fi power saving disable (prevents 10-100ms spikes)
+                await CoreEngine.Instance.AdapterOptimizer.DisableWifiPowerSaveAsync();
+
+                // Disable Delivery Optimization (stops P2P update bandwidth theft)
+                await CoreEngine.Instance.AdapterOptimizer.DisableDeliveryOptimizationAsync();
+
+                // Reduce interrupt moderation for lower NIC latency
+                await CoreEngine.Instance.AdapterOptimizer.ReduceInterruptModerationAsync();
+
+                // Apply QoS for game traffic priority
+                if (session != null && session.ProcessId > 0)
+                    await CoreEngine.Instance.NetworkOptimizer.ApplyGameQoSAsync(session.ProcessId);
+
                 EventBus.Instance.Publish(new OptimizationAppliedEvent
                 {
                     ActionName = "Gaming Mode ON",
-                    Description = "Gaming mode activated. Power plan, Nagle, visual effects optimized."
+                    Description = "Gaming mode activated. Wi-Fi PSM, power plan, QoS, interrupt moderation optimized."
                 });
             });
         }
@@ -104,6 +117,10 @@ namespace NetProve.Engines
                 await CoreEngine.Instance.PowerPlan.RestoreOriginalPlanAsync();
                 await CoreEngine.Instance.AdapterOptimizer.EnableNagleAsync();
                 await CoreEngine.Instance.PowerPlan.RestoreVisualEffectsAsync();
+                await CoreEngine.Instance.NetworkOptimizer.RemoveGameQoSAsync();
+                await CoreEngine.Instance.AdapterOptimizer.RestoreWifiPowerSaveAsync();
+                await CoreEngine.Instance.AdapterOptimizer.RestoreDeliveryOptimizationAsync();
+                await CoreEngine.Instance.AdapterOptimizer.RestoreInterruptModerationAsync();
                 EventBus.Instance.Publish(new OptimizationAppliedEvent
                 {
                     ActionName = "Gaming Mode OFF",

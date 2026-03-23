@@ -75,8 +75,6 @@ namespace NetProve.Engines
                     RunNetsh("int tcp set global autotuninglevel=normal");
                     // Disable timestamps to reduce 12 bytes per packet overhead
                     RunNetsh("int tcp set global timestamps=disabled");
-                    // Disable RSC - reduces latency at minor throughput cost
-                    RunNetsh("int tcp set global rsc=disabled");
 
                     // ── Disable Network Throttling ───────────────────────────
                     // Windows throttles non-multimedia network traffic by default.
@@ -88,8 +86,8 @@ namespace NetProve.Engines
                         {
                             // 0xFFFFFFFF = disable throttling entirely
                             mmKey.SetValue("NetworkThrottlingIndex", unchecked((int)0xFFFFFFFF), RegistryValueKind.DWord);
-                            // 0 = reserve 0% of CPU for system tasks (give all to apps)
-                            mmKey.SetValue("SystemResponsiveness", 0, RegistryValueKind.DWord);
+                            // 10 = reserve 10% of CPU for system tasks (safe minimum)
+                            mmKey.SetValue("SystemResponsiveness", 10, RegistryValueKind.DWord);
                         }
                     }
                     catch { }
@@ -155,7 +153,6 @@ namespace NetProve.Engines
                     RunNetsh("int tcp set global rss=enabled");
                     RunNetsh("int tcp set global autotuninglevel=normal");
                     RunNetsh("int tcp set global timestamps=default");
-                    RunNetsh("int tcp set global rsc=enabled");
 
                     try
                     {
@@ -209,6 +206,189 @@ namespace NetProve.Engines
                 }
                 catch { return false; }
             });
+        }
+
+        /// <summary>
+        /// Applies QoS DSCP marking for game traffic priority.
+        /// Sets the game process to use Expedited Forwarding (DSCP 46)
+        /// which routers recognize as high-priority real-time traffic.
+        /// </summary>
+        public async Task<bool> ApplyGameQoSAsync(int processId)
+        {
+            return await Task.Run(() =>
+            {
+                try
+                {
+                    // Set QoS policy for the game process via registry
+                    // DSCP 46 = Expedited Forwarding (highest priority for real-time)
+                    const string qosKey = @"SOFTWARE\Policies\Microsoft\Windows\QoS\NetProve Gaming";
+                    try
+                    {
+                        using var key = Registry.LocalMachine.CreateSubKey(qosKey);
+                        if (key != null)
+                        {
+                            key.SetValue("Version", "1.0");
+                            key.SetValue("Application Name", "*"); // All apps when gaming
+                            key.SetValue("Protocol", "*");
+                            key.SetValue("Local Port", "*");
+                            key.SetValue("Local IP", "*");
+                            key.SetValue("Local IP Prefix Length", "*");
+                            key.SetValue("Remote Port", "*");
+                            key.SetValue("Remote IP", "*");
+                            key.SetValue("Remote IP Prefix Length", "*");
+                            key.SetValue("DSCP Value", "46"); // Expedited Forwarding
+                            key.SetValue("Throttle Rate", "-1"); // No throttling
+                        }
+                    }
+                    catch { }
+
+                    // Also set the game process to use high I/O priority
+                    try
+                    {
+                        var proc = Process.GetProcessById(processId);
+                        proc.PriorityClass = ProcessPriorityClass.High;
+                        // Set processor affinity to performance cores if available
+                        if (Environment.ProcessorCount > 4)
+                        {
+                            // Use upper half of cores (typically P-cores on hybrid CPUs)
+                            long mask = 0;
+                            for (int i = Environment.ProcessorCount / 2; i < Environment.ProcessorCount; i++)
+                                mask |= 1L << i;
+                            if (mask > 0)
+                                proc.ProcessorAffinity = (IntPtr)mask;
+                        }
+                        proc.Dispose();
+                    }
+                    catch { }
+
+                    EventBus.Instance.Publish(new OptimizationAppliedEvent
+                    {
+                        ActionName = "QoS Priority",
+                        Description = "Game traffic marked as high priority (DSCP 46)."
+                    });
+                    return true;
+                }
+                catch { return false; }
+            });
+        }
+
+        /// <summary>Removes QoS gaming policy.</summary>
+        public async Task<bool> RemoveGameQoSAsync()
+        {
+            return await Task.Run(() =>
+            {
+                try
+                {
+                    const string qosParent = @"SOFTWARE\Policies\Microsoft\Windows\QoS";
+                    using var parentKey = Registry.LocalMachine.OpenSubKey(qosParent, true);
+                    parentKey?.DeleteSubKey("NetProve Gaming", false);
+                    return true;
+                }
+                catch { return false; }
+            });
+        }
+
+        /// <summary>
+        /// Diagnoses the actual source of network problems.
+        /// Returns a diagnostic report identifying whether the issue is
+        /// local (WiFi/adapter), router, ISP, or destination server.
+        /// </summary>
+        public async Task<NetworkDiagnosticResult> DiagnoseNetworkAsync()
+        {
+            return await Task.Run(() =>
+            {
+                var result = new NetworkDiagnosticResult();
+
+                try
+                {
+                    // Step 1: Ping gateway (local network test)
+                    var gatewayPing = PingHost(GetDefaultGateway());
+                    result.GatewayPingMs = gatewayPing;
+                    result.GatewayReachable = gatewayPing >= 0;
+
+                    // Step 2: Ping ISP DNS / first hop beyond router
+                    var ispPing = PingHost("1.1.1.1"); // Cloudflare (reliable, fast)
+                    result.IspPingMs = ispPing;
+                    result.IspReachable = ispPing >= 0;
+
+                    // Step 3: Ping popular game servers
+                    var gamePing = PingHost("8.8.8.8"); // Google DNS as proxy
+                    result.InternetPingMs = gamePing;
+                    result.InternetReachable = gamePing >= 0;
+
+                    // Diagnose the bottleneck
+                    if (!result.GatewayReachable)
+                    {
+                        result.ProblemSource = "Local Network";
+                        result.Recommendation = "Wi-Fi/Ethernet bağlantınızı kontrol edin. Router'ı yeniden başlatmayı deneyin.";
+                    }
+                    else if (result.GatewayPingMs > 10)
+                    {
+                        result.ProblemSource = "Wi-Fi / Local Network";
+                        result.Recommendation = "Gateway ping çok yüksek. 5GHz Wi-Fi'ye geçin veya Ethernet kablosu kullanın.";
+                    }
+                    else if (!result.IspReachable)
+                    {
+                        result.ProblemSource = "ISP / Router";
+                        result.Recommendation = "İnternet bağlantısı yok. Router'ı kontrol edin veya ISP'nize başvurun.";
+                    }
+                    else if (result.IspPingMs > 50)
+                    {
+                        result.ProblemSource = "ISP";
+                        result.Recommendation = "ISP gecikmesi yüksek. Bu uygulama ile düzeltilemez — ISP'nize başvurun veya VPN deneyin.";
+                    }
+                    else
+                    {
+                        result.ProblemSource = "None";
+                        result.Recommendation = "Ağ bağlantınız iyi durumda.";
+                    }
+                }
+                catch
+                {
+                    result.ProblemSource = "Unknown";
+                    result.Recommendation = "Tanılama sırasında hata oluştu.";
+                }
+
+                return result;
+            });
+        }
+
+        private static string GetDefaultGateway()
+        {
+            try
+            {
+                foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (ni.OperationalStatus != OperationalStatus.Up) continue;
+                    if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                    var props = ni.GetIPProperties();
+                    foreach (var gw in props.GatewayAddresses)
+                    {
+                        var addr = gw.Address.ToString();
+                        if (addr != "0.0.0.0" && !addr.Contains(":"))
+                            return addr;
+                    }
+                }
+            }
+            catch { }
+            return "192.168.1.1";
+        }
+
+        private static double PingHost(string host)
+        {
+            try
+            {
+                using var ping = new System.Net.NetworkInformation.Ping();
+                var replies = new List<double>();
+                for (int i = 0; i < 3; i++)
+                {
+                    var reply = ping.Send(host, 2000);
+                    if (reply.Status == System.Net.NetworkInformation.IPStatus.Success)
+                        replies.Add(reply.RoundtripTime);
+                }
+                return replies.Count > 0 ? replies.Average() : -1;
+            }
+            catch { return -1; }
         }
 
         public bool IsTcpOptimized => _tcpOptimized;

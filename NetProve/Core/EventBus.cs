@@ -109,4 +109,17 @@ namespace NetProve.Core
 
     /// <summary>Fired when lag prediction stabilizes — dismiss the warning banner.</summary>
     public sealed class LagWarningDismissEvent { }
+
+    /// <summary>Network diagnostic result identifying bottleneck location.</summary>
+    public sealed class NetworkDiagnosticResult
+    {
+        public double GatewayPingMs { get; set; }
+        public double IspPingMs { get; set; }
+        public double InternetPingMs { get; set; }
+        public bool GatewayReachable { get; set; }
+        public bool IspReachable { get; set; }
+        public bool InternetReachable { get; set; }
+        public string ProblemSource { get; set; } = "Unknown";
+        public string Recommendation { get; set; } = "";
+    }
 }
