@@ -59,3 +59,36 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     }
   });
 });
+
+// ── Feedback form success state (Option C: ephemeral) ────────────────
+// Netlify Forms `/?feedback=success#yorumlar` adresine yönlendirir.
+// Başarı mesajını 5 sn göster, sonra formu geri getir. URL de temizlenir.
+function handleFeedbackSuccess() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('feedback') !== 'success') return;
+
+  const form = document.querySelector('.feedback-form');
+  const success = document.getElementById('feedback-success');
+  if (!form || !success) return;
+
+  // URL'yi hemen temizle - F5 veya paylaşım durumunda tekrar tetiklenmesin
+  history.replaceState({}, '', window.location.pathname + window.location.hash);
+
+  // Formu gizle, başarı mesajını fade-in ile göster
+  form.style.display = 'none';
+  success.style.display = 'block';
+  success.style.opacity = '0';
+  success.style.transition = 'opacity 0.4s ease';
+  requestAnimationFrame(() => { success.style.opacity = '1'; });
+
+  // 5 sn sonra: mesajı fade-out et, formu geri getir
+  setTimeout(() => {
+    success.style.opacity = '0';
+    setTimeout(() => {
+      success.style.display = 'none';
+      form.style.display = '';
+      form.reset();
+    }, 400);
+  }, 5000);
+}
+handleFeedbackSuccess();

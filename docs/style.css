@@ -450,31 +450,150 @@ ul { list-style: none; }
   font-size: 0.9rem; line-height: 1.7;
 }
 
-/* ===== Yorumlar (Cusdis) ===== */
-.comments {
+/* ===== Yorumlar & Geri Bildirim ===== */
+.testimonials {
   padding: 80px 0 100px;
   background: var(--bg);
 }
-.comments .section-desc {
-  max-width: 560px; margin: 14px auto 0;
-  color: var(--text-muted); font-size: 0.95rem; line-height: 1.65;
+
+/* Kart grid'i - .feature-grid ile aynı responsive davranış */
+.testimonial-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  max-width: 1100px;
+  margin: 48px auto 64px;
 }
-.comments-box {
-  max-width: 760px; margin: 0 auto;
-  /* Ayrı bir kart gibi durmasın - sayfayla aynı akışta olsun */
+@media (max-width: 900px) {
+  .testimonial-grid { grid-template-columns: repeat(2, 1fr); }
 }
-#cusdis_thread {
-  width: 100%;
-  min-height: 650px;
-  overflow: hidden;
+@media (max-width: 600px) {
+  .testimonial-grid { grid-template-columns: 1fr; }
 }
-#cusdis_thread iframe {
-  width: 100%;
-  min-width: 100%;
-  border: 0;
-  color-scheme: dark;
-  display: block;
+
+/* Yorum kartı - feature-card desenini takip eder */
+.testimonial-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  display: flex; flex-direction: column; gap: 20px;
+  transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
 }
+.testimonial-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(33,150,243,0.25);
+  box-shadow: var(--shadow-glow);
+}
+.testimonial-quote-icon {
+  width: 28px; height: 28px;
+  color: var(--accent);
+  opacity: 0.8;
+}
+.testimonial-quote {
+  color: var(--text-sub);
+  font-size: 0.95rem; line-height: 1.7;
+  flex: 1;
+  margin: 0;
+}
+.testimonial-author {
+  display: flex; align-items: center; gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.testimonial-avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 0.9rem;
+  color: #fff;
+  flex-shrink: 0;
+}
+.testimonial-avatar.avatar-purple { background: linear-gradient(135deg, var(--purple), var(--accent)); }
+.testimonial-avatar.avatar-green  { background: linear-gradient(135deg, var(--green), var(--cyan)); }
+.testimonial-avatar.avatar-orange { background: linear-gradient(135deg, var(--orange), var(--red)); }
+.testimonial-info { display: flex; flex-direction: column; gap: 2px; }
+.testimonial-info .name { color: var(--text); font-weight: 600; font-size: 0.9rem; }
+.testimonial-info .role { color: var(--text-muted); font-size: 0.8rem; }
+
+/* Form bölümü - sayfayla aynı akışta, kart hissi vermeden */
+.feedback-form-wrapper {
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 40px 36px;
+}
+.feedback-form-header { text-align: center; margin-bottom: 28px; }
+.feedback-form-header h3 {
+  font-size: 1.3rem; font-weight: 700; color: var(--text);
+  margin-bottom: 8px;
+}
+.feedback-form-header p {
+  color: var(--text-sub); font-size: 0.9rem; line-height: 1.6;
+}
+
+.feedback-form { display: flex; flex-direction: column; gap: 18px; }
+.form-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+}
+@media (max-width: 600px) {
+  .form-row { grid-template-columns: 1fr; }
+}
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group label {
+  font-size: 0.85rem; font-weight: 500; color: var(--text-sub);
+}
+.form-group input,
+.form-group select,
+.form-group textarea {
+  background: var(--bg);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.92rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(33,150,243,0.15);
+}
+.form-group textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
+
+/* Privacy checkbox satırı */
+.checkbox-group {
+  display: flex; align-items: flex-start; gap: 10px;
+  color: var(--text-sub); font-size: 0.85rem; line-height: 1.5;
+  cursor: pointer;
+}
+.checkbox-group input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Honeypot - ekranda tamamen gizli, bot tarayıcılar görür */
+.hidden-honeypot { display: none !important; }
+
+.btn-block { width: 100%; justify-content: center; }
+
+/* Başarılı gönderim durumu */
+.feedback-success {
+  background: rgba(76,175,80,0.08);
+  border: 1px solid rgba(76,175,80,0.3);
+  border-radius: var(--radius);
+  padding: 32px 28px;
+  text-align: center;
+  color: var(--text);
+}
+.feedback-success h3 { color: var(--green); font-size: 1.15rem; margin-bottom: 8px; }
+.feedback-success p { color: var(--text-sub); font-size: 0.9rem; line-height: 1.6; }
 
 /* ===== Footer ===== */
 .footer {
